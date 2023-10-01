@@ -1,4 +1,5 @@
 const axios = require("axios");
+const GOOGLE_API_KEY = "<YOUR KEY>"
 
 function getData(url) {
   return new Promise((resolve, reject) => {
@@ -17,7 +18,7 @@ function getData(url) {
     let config = {
       method: "post",
       maxBodyLength: Infinity,
-      url: "https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=AIzaSyBMZvQ8aOwfPGfUNCH-Eo0Ezq3fu4l6Xgc",
+      url: "https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=" + GOOGLE_API_KEY,
       headers: {
         "Content-Type": "application/json",
       },
