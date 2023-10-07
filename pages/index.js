@@ -84,9 +84,8 @@ export default function Home() {
   function handleSearch(e) {
     e.preventDefault();
     const postData = async () => {
-      console.log(searchURL);
       const data = {
-        search: searchURL,
+        search: searchURL.join(","),
       };
 
       const response = await fetch("/api/crux", {
