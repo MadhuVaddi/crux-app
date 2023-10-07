@@ -4,7 +4,10 @@ import utilStyles from "../styles/utils.module.css";
 import { useState } from "react";
 import {
   Button,
+  Chip,
+  FormControl,
   Grid,
+  Input,
   Item,
   Paper,
   Table,
@@ -14,16 +17,31 @@ import {
   TableHead,
   TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
-import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
-import ArrowDownwardRoundedIcon from '@mui/icons-material/ArrowDownwardRounded';
+import ArrowUpwardRoundedIcon from "@mui/icons-material/ArrowUpwardRounded";
+import ArrowDownwardRoundedIcon from "@mui/icons-material/ArrowDownwardRounded";
 
 export default function Home() {
-  const [searchURL, setSearchURL] = useState("");
+  const [searchURL, setSearchURL] = useState([]);
+  const [currValue, setCurrValue] = useState("");
   const [searchText, setSearchText] = useState("");
   const [orderItem, setOrderItem] = useState("asc");
   const [orderByItem, setOrderByItem] = useState("name");
   const [data, setData] = useState([]);
+  const [metrics, setMetrics] = useState("average");
+  const [hasMetrics, setHasMetrics] = useState(false);
+  const CONDITIONAL_FILTERS = [
+    "density1",
+    "density2",
+    "density3",
+    "percentile",
+  ];
+
+  const handleMetricsChange = (event, newMetrics) => {
+    setMetrics(newMetrics);
+  };
 
   const formatKey = (key) => {
     let i,
@@ -34,8 +52,12 @@ export default function Home() {
     return frags.join(" ");
   };
 
-  const average = (arr) => {
-    return arr.reduce((a, b) => parseFloat(a) + parseFloat(b), 0) / arr.length;
+  const compute = (arr) => {
+    let sum = arr.reduce((a, b) => parseFloat(a) + parseFloat(b), 0);
+    return {
+      sum,
+      average: sum / arr.length,
+    };
   };
 
   const formatData = (data) => {
@@ -79,10 +101,10 @@ export default function Home() {
       Object.keys(formattedData).forEach((key) => {
         let obj = {
           name: formatKey(key),
-          density1: average(formattedData[key].density1),
-          density2: average(formattedData[key].density2),
-          density3: average(formattedData[key].density3),
-          percentile: average(formattedData[key].percentile),
+          density1: compute(formattedData[key].density1),
+          density2: compute(formattedData[key].density2),
+          density3: compute(formattedData[key].density3),
+          percentile: compute(formattedData[key].percentile),
         };
         new_data.push(obj);
       });
@@ -90,42 +112,123 @@ export default function Home() {
     });
   }
 
-  const changeOrder = (name) => {
-    if(orderByItem === name) {
-      setOrderItem(prev => {
-        console.log(prev)
-        return prev === 'asc' ? 'desc' : 'asc'
-      })
+  const changeOrder = (name, metrics) => {
+    setHasMetrics(!!metrics);
+    if (orderByItem === name) {
+      setOrderItem((prev) => {
+        return prev === "asc" ? "desc" : "asc";
+      });
     } else {
-      setOrderItem('asc')
+      setOrderItem("asc");
     }
-    setOrderByItem(name)
-  }
+    setOrderByItem(name);
+  };
 
-  const filterData = data.filter(dt => {
-    if(searchText !== "") {
-      return JSON.stringify(dt).toLowerCase().indexOf(searchText.toLowerCase()) > -1
+  const isValidUrl = (urlString) => {
+    var urlPattern = new RegExp(
+      "^(https?:\\/\\/)?" + // validate protocol
+        "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // validate domain name
+        "((\\d{1,3}\\.){3}\\d{1,3}))" + // validate OR ip (v4) address
+        "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" + // validate port and path
+        "(\\?[;&a-z\\d%_.~+=-]*)?" + // validate query string
+        "(\\#[-a-z\\d_]*)?$",
+      "i"
+    ); // validate fragment locator
+    return !!urlPattern.test(urlString);
+  };
+  const filterData = data.filter((dt) => {
+    if (searchText !== "") {
+      let filtered = false;
+      let filterKey = null;
+      let filterValue = null;
+      if (searchText.indexOf(">") > -1) {
+        filterKey = searchText
+          .split(">")[0]
+          .trim()
+          .replace(/ /g, "")
+          .toLowerCase();
+        filterValue = parseFloat(searchText.split(">")[1].trim());
+        filtered = true;
+        if (CONDITIONAL_FILTERS.indexOf(filterKey) > -1) {
+          return dt[filterKey][metrics] > filterValue;
+        }
+      } else if (searchText.indexOf("<") > -1) {
+        filterKey = searchText
+          .split("<")[0]
+          .trim()
+          .replace(/ /g, "")
+          .toLowerCase();
+        filterValue = parseFloat(searchText.split("<")[1].trim());
+        filtered = true;
+        if (CONDITIONAL_FILTERS.indexOf(filterKey) > -1) {
+          return dt[filterKey][metrics] < filterValue;
+        }
+      }
+      if (searchText.indexOf("=") > -1) {
+        filterKey = searchText
+          .split("=")[0]
+          .trim()
+          .replace(/ /g, "")
+          .toLowerCase();
+        filterValue = parseFloat(searchText.split("=")[1].trim());
+        filtered = true;
+        if (CONDITIONAL_FILTERS.indexOf(filterKey) > -1) {
+          return dt[filterKey][metrics] === filterValue;
+        }
+      }
+      if (!filtered) {
+        return (
+          JSON.stringify(dt).toLowerCase().indexOf(searchText.toLowerCase()) >
+          -1
+        );
+      }
     } else {
-      return dt
+      return dt;
     }
-  })
-  filterData.sort(getComparator(orderItem, orderByItem))
+  });
+  filterData.sort(getComparator(orderItem, orderByItem));
 
   function descendingComparator(a, b, orderBy) {
-    if (b[orderBy] < a[orderBy]) {
-      return -1
+    if (hasMetrics) {
+      if (b[orderBy][metrics] < a[orderBy][metrics]) {
+        return -1;
+      }
+      if (b[orderBy][metrics] > a[orderBy][metrics]) {
+        return 1;
+      }
+    } else {
+      if (b[orderBy] < a[orderBy]) {
+        return -1;
+      }
+      if (b[orderBy] > a[orderBy]) {
+        return 1;
+      }
     }
-    if (b[orderBy] > a[orderBy]) {
-      return 1
-    }
-    return 0
+    return 0;
   }
-    
+
   function getComparator(order, orderBy) {
-    return order === 'desc'
+    return order === "desc"
       ? (a, b) => descendingComparator(a, b, orderBy)
-      : (a, b) => -descendingComparator(a, b, orderBy)
+      : (a, b) => -descendingComparator(a, b, orderBy);
   }
+
+  const handleKeyUp = (e) => {
+    if (e.target.value.trim() && (e.keyCode == 32 || e.keyCode == 13)) {
+      if (isValidUrl(e.target.value.trim())) {
+        setSearchURL((oldState) => [...oldState, e.target.value.trim()]);
+        setCurrValue("");
+      } else {
+        alert("Invalid URL");
+      }
+    }
+  };
+
+  const handleDelete = (item, index) => {
+    let arr = [...searchURL];
+    arr.splice(index, 1);
+    setSearchURL(arr);
+  };
 
   return (
     <Layout home>
@@ -134,26 +237,78 @@ export default function Home() {
       </Head>
       <section className={utilStyles.headingMd}>
         <Grid container spacing={2}>
-          <Grid item xs={3}>
+          <Grid item xs={2}>
             URL
           </Grid>
-          <Grid item xs={6}>
-            <TextField
+          <Grid item xs={8}>
+            {/* <TextField
               id="outlined-basic"
               size="small"
               fullWidth
               variant="outlined"
               onChange={(e) => setSearchURL(e.target.value)}
-            />
+            /> */}
+            <FormControl
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                flexWrap: "wrap",
+                flexDirection: "row",
+                // border: "2px solid lightgray",
+                padding: 4,
+                borderRadius: "4px",
+                "&> div.container": {
+                  gap: "6px",
+                  display: "flex",
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                },
+                "& > div.container > span": {
+                  backgroundColor: "blue",
+                  padding: "1px 3px",
+                  borderRadius: "4px",
+                },
+              }}
+            >
+              <div className={"container"}>
+                {searchURL.map((item, index) => (
+                  <Chip
+                    size="small"
+                    onDelete={() => handleDelete(item, index)}
+                    label={item}
+                  />
+                ))}
+              </div>
+              <Input
+                value={currValue}
+                onChange={(e) => {
+                  setCurrValue(e.target.value);
+                }}
+                onKeyDown={handleKeyUp}
+              />
+            </FormControl>
           </Grid>
-          <Grid item xs={3} alignItems="center">
+          <Grid item xs={2} alignItems="center">
             <Button variant="contained" onClick={handleSearch}>
               Search
             </Button>
           </Grid>
         </Grid>
-        <Grid container style={{background:"white"}}>
-          <Grid item xs={9}></Grid>
+        <Grid container style={{ background: "white" }} sx={{ p: 2 }}>
+          <Grid item xs={9}>
+            <ToggleButtonGroup
+              size="small"
+              color="primary"
+              value={metrics}
+              exclusive
+              onChange={handleMetricsChange}
+              aria-label="Type"
+            >
+              <ToggleButton value="average">Average</ToggleButton>
+              <ToggleButton value="sum">Sum</ToggleButton>
+            </ToggleButtonGroup>
+          </Grid>
           <Grid item xs={3}>
             <TextField
               id="outlined-basic"
@@ -168,25 +323,89 @@ export default function Home() {
           <Table sx={{ minWidth: 650 }} aria-label="simple table">
             <TableHead>
               <TableRow>
-                <TableCell style={{cursor: "pointer"}} onClick={() => {
-                  changeOrder('name')
-                }}>Metrics {orderByItem === 'name' ? (orderItem === 'asc' ? <ArrowUpwardRoundedIcon/>: <ArrowDownwardRoundedIcon/>):null} </TableCell>
-                <TableCell style={{cursor: "pointer"}} align="right"onClick={() => {
-                  changeOrder('density1')
-                }}>Density 1 {orderByItem === 'density1' ? (orderItem === 'asc' ? <ArrowUpwardRoundedIcon/>: <ArrowDownwardRoundedIcon/>):null} </TableCell>
-                <TableCell style={{cursor: "pointer"}} align="right"onClick={() => {
-                  changeOrder('density2')
-                }}>Density 2 {orderByItem === 'density2' ? (orderItem === 'asc' ? <ArrowUpwardRoundedIcon/>: <ArrowDownwardRoundedIcon/>):null} </TableCell>
-                <TableCell style={{cursor: "pointer"}} align="right"onClick={() => {
-                  changeOrder('density3')
-                }}>Density 3 {orderByItem === 'density3' ? (orderItem === 'asc' ? <ArrowUpwardRoundedIcon/>: <ArrowDownwardRoundedIcon/>):null} </TableCell>
-                <TableCell style={{cursor: "pointer"}} align="right"onClick={() => {
-                  changeOrder('percentile')
-                }}>Percentile {orderByItem === 'percentile' ? (orderItem === 'asc' ? <ArrowUpwardRoundedIcon/>: <ArrowDownwardRoundedIcon/>):null} </TableCell>
+                <TableCell
+                  style={{ cursor: "pointer" }}
+                  onClick={() => {
+                    changeOrder("name");
+                  }}
+                >
+                  Metrics{" "}
+                  {orderByItem === "name" ? (
+                    orderItem === "asc" ? (
+                      <ArrowUpwardRoundedIcon />
+                    ) : (
+                      <ArrowDownwardRoundedIcon />
+                    )
+                  ) : null}{" "}
+                </TableCell>
+                <TableCell
+                  style={{ cursor: "pointer" }}
+                  align="right"
+                  onClick={() => {
+                    changeOrder("density1", 1);
+                  }}
+                >
+                  Density 1{" "}
+                  {orderByItem === "density1" ? (
+                    orderItem === "asc" ? (
+                      <ArrowUpwardRoundedIcon />
+                    ) : (
+                      <ArrowDownwardRoundedIcon />
+                    )
+                  ) : null}{" "}
+                </TableCell>
+                <TableCell
+                  style={{ cursor: "pointer" }}
+                  align="right"
+                  onClick={() => {
+                    changeOrder("density2", 1);
+                  }}
+                >
+                  Density 2{" "}
+                  {orderByItem === "density2" ? (
+                    orderItem === "asc" ? (
+                      <ArrowUpwardRoundedIcon />
+                    ) : (
+                      <ArrowDownwardRoundedIcon />
+                    )
+                  ) : null}{" "}
+                </TableCell>
+                <TableCell
+                  style={{ cursor: "pointer" }}
+                  align="right"
+                  onClick={() => {
+                    changeOrder("density3", 1);
+                  }}
+                >
+                  Density 3{" "}
+                  {orderByItem === "density3" ? (
+                    orderItem === "asc" ? (
+                      <ArrowUpwardRoundedIcon />
+                    ) : (
+                      <ArrowDownwardRoundedIcon />
+                    )
+                  ) : null}{" "}
+                </TableCell>
+                <TableCell
+                  style={{ cursor: "pointer" }}
+                  align="right"
+                  onClick={() => {
+                    changeOrder("percentile", 1);
+                  }}
+                >
+                  Percentile{" "}
+                  {orderByItem === "percentile" ? (
+                    orderItem === "asc" ? (
+                      <ArrowUpwardRoundedIcon />
+                    ) : (
+                      <ArrowDownwardRoundedIcon />
+                    )
+                  ) : null}{" "}
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filterData.length > 1
+              {filterData.length > 0
                 ? filterData.map((dt) => (
                     <TableRow
                       sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
@@ -194,25 +413,21 @@ export default function Home() {
                       <TableCell component="th" scope="row">
                         {dt.name}
                       </TableCell>
-                      <TableCell align="right">{dt.density1}</TableCell>
-                      <TableCell align="right">{dt.density2}</TableCell>
-                      <TableCell align="right">{dt.density3}</TableCell>
-                      <TableCell align="right">{dt.percentile}</TableCell>
+                      <TableCell align="right">
+                        {dt.density1[metrics]}
+                      </TableCell>
+                      <TableCell align="right">
+                        {dt.density2[metrics]}
+                      </TableCell>
+                      <TableCell align="right">
+                        {dt.density3[metrics]}
+                      </TableCell>
+                      <TableCell align="right">
+                        {dt.percentile[metrics]}
+                      </TableCell>
                     </TableRow>
                   ))
                 : null}
-              {/* {data && Object.keys(data.record.metrics).map((key) => (
-                <TableRow
-                  key={key}
-                  sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
-                >
-                  <TableCell component="th" scope="row">{formatKey(key)}</TableCell>
-                  <TableCell align="right">{data.record.metrics[key].histogram[0].density}</TableCell>
-                  <TableCell align="right">{data.record.metrics[key].histogram[1].density}</TableCell>
-                  <TableCell align="right">{data.record.metrics[key].histogram[2].density}</TableCell>
-                  <TableCell align="right">{data.record.metrics[key].percentiles.p75}</TableCell>
-                </TableRow>
-              ))} */}
             </TableBody>
           </Table>
         </TableContainer>

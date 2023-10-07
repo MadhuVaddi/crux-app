@@ -1,5 +1,5 @@
 const axios = require("axios");
-const GOOGLE_API_KEY = "<YOUR KEY>"
+const GOOGLE_API_KEY = "<YOUR_API_KEY>"
 
 function getData(url) {
   return new Promise((resolve, reject) => {
